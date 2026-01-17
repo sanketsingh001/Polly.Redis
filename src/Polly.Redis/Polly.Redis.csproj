@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    
+    <!-- NuGet Package Metadata -->
+    <PackageId>Polly.Redis</PackageId>
+    <Version>1.0.0-beta</Version>
+    <Authors>Your Name</Authors>
+    <Company>Community</Company>
+    <Product>Polly.Redis</Product>
+    <Description>Distributed Circuit Breaker using Redis. Based on Polly 8.5.0 with Redis state storage instead of in-memory. Works with Azure Redis, AWS ElastiCache, Redis Cloud, and self-hosted Redis.</Description>
+    <PackageTags>polly;circuitbreaker;redis;distributed;resilience;azure;aws;fault-tolerance;microservices</PackageTags>
+    <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/YourUsername/Polly.Redis</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/YourUsername/Polly.Redis.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Minimal Polly dependencies - just Core types -->
+    <PackageReference Include="Polly.Core" Version="8.5.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
