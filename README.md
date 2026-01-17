@@ -1,6 +1,6 @@
-# Polly.Redis
+# CircuitBreaker.Redis.Distributed
 
-[![NuGet](https://img.shields.io/nuget/v/Polly.Redis.svg)](https://www.nuget.org/packages/Polly.Redis/)
+[![NuGet](https://img.shields.io/nuget/v/CircuitBreaker.Redis.Distributed.svg)](https://www.nuget.org/packages/CircuitBreaker.Redis.Distributed/)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
 
@@ -9,7 +9,7 @@
 ## 🚀 Quick Start
 
 ```bash
-dotnet add package Polly.Redis
+dotnet add package CircuitBreaker.Redis.Distributed
 ```
 
 ```csharp
@@ -79,10 +79,10 @@ When any instance detects failures exceeding threshold:
 - 🔄 **API Gateways** - Protect downstream services
 - 💰 **Cost Savings** - Stop hammering paid APIs when they're down
 
-## 🆚 Why Choose Polly.Redis?
+## 🆚 Why Choose CircuitBreaker.Redis.Distributed?
 
-| Feature | Polly Built-in | Polly.Redis |
-|---------|----------------|-------------|
+| Feature | Polly Built-in | CircuitBreaker.Redis.Distributed |
+|---------|----------------|----------------------------------|
 | State Storage | In-memory (per instance) | Redis (distributed) |
 | Multi-instance Coordination | ❌ No | ✅ Yes |
 | All instances know circuit state | ❌ No | ✅ Yes |

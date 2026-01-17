@@ -8,19 +8,44 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     
-    <!-- NuGet Package Metadata -->
-    <PackageId>Polly.Redis</PackageId>
-    <Version>1.0.0-beta</Version>
-    <Authors>Your Name</Authors>
-    <Company>Community</Company>
-    <Product>Polly.Redis</Product>
-    <Description>Distributed Circuit Breaker using Redis. Based on Polly 8.5.0 with Redis state storage instead of in-memory. Works with Azure Redis, AWS ElastiCache, Redis Cloud, and self-hosted Redis.</Description>
-    <PackageTags>polly;circuitbreaker;redis;distributed;resilience;azure;aws;fault-tolerance;microservices</PackageTags>
+    <!-- NuGet Package Metadata - Optimized for Discoverability -->
+    <PackageId>CircuitBreaker.Redis.Distributed</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Sanket Singh</Authors>
+    <Company>Open Source</Company>
+    <Product>CircuitBreaker.Redis.Distributed</Product>
+    <Title>Distributed Circuit Breaker for .NET using Redis</Title>
+    <Description>Distributed Circuit Breaker that coordinates state across multiple .NET application instances using Redis. Perfect for microservices, cloud applications, and scaled systems. When any instance detects failures and breaks the circuit, ALL instances immediately stop calling the failing service via Redis coordination. Works with Azure Redis Cache, AWS ElastiCache, Redis Cloud, and self-hosted Redis. Simple fluent API, automatic fallback, distributed locking to prevent race conditions.</Description>
+    <PackageTags>polly;circuit-breaker;circuitbreaker;redis;distributed;resilience;microservices;fault-tolerance;azure;aws;cloud;distributed-systems;circuit;breaker;reliability;high-availability;dotnet;csharp;netcore;state-management</PackageTags>
     <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/YourUsername/Polly.Redis</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/YourUsername/Polly.Redis.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/sanketsingh001/Polly.Redis</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/sanketsingh001/Polly.Redis.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>
+      🎉 Initial Release v1.0.0
+      
+      ✨ Features:
+      • Distributed circuit breaker with Redis state coordination
+      • All instances share circuit state - when one breaks, all stop
+      • Distributed locking prevents race conditions
+      • Simple fluent API: CircuitBreaker.Create("id", "redis")
+      • Automatic fallback to in-memory if Redis unavailable
+      • Works with ALL Redis providers (Azure, AWS, Redis Cloud, self-hosted)
+      • Built-in resilience patterns
+      
+      🔧 Technical:
+      • Based on Polly 8.5.0 concepts
+      • Redis SETNX for distributed locking
+      • Lua scripts for atomic operations
+      • State machine pattern implementation
+      
+      📚 Perfect for:
+      • Microservices architectures
+      • Kubernetes/Docker deployments
+      • Cloud-native applications
+      • Scaled systems with multiple instances
+    </PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

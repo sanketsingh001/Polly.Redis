@@ -60,7 +60,9 @@ internal class RedisStateStore : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get circuit state");
-            return _options.EnableFallbackToInMemory ? null : throw;
+            if (_options.EnableFallbackToInMemory)
+                return null;
+            throw;
         }
     }
 
@@ -87,7 +89,9 @@ internal class RedisStateStore : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get metrics");
-            return _options.EnableFallbackToInMemory ? null : throw;
+            if (_options.EnableFallbackToInMemory)
+                return null;
+            throw;
         }
     }
 
@@ -118,7 +122,9 @@ internal class RedisStateStore : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get blocked timestamp");
-            return _options.EnableFallbackToInMemory ? null : throw;
+            if (_options.EnableFallbackToInMemory)
+                return null;
+            throw;
         }
     }
 

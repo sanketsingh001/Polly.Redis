@@ -1,8 +1,9 @@
-// Polly.Redis - Developer-Friendly Distributed Circuit Breaker
+// DistributedCircuitBreaker.Redis - Developer-Friendly Distributed Circuit Breaker
 // Simple to use, highly configurable, works with any scenario
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 
 namespace Polly.Redis;
@@ -68,7 +69,7 @@ public static class CircuitBreaker
         private TimeSpan _samplingWindow = TimeSpan.FromSeconds(10);
         private bool _fallbackToMemory = true;
         private Action<StateChange>? _onStateChange;
-        private ILogger? _logger;
+        private ILogger<RedisCircuitBreaker>? _logger;
 
         /// <summary>
         /// Set the circuit breaker ID. Instances with same ID share state.
@@ -152,7 +153,7 @@ public static class CircuitBreaker
         /// <summary>
         /// Provide a logger for debugging.
         /// </summary>
-        public Builder WithLogger(ILogger logger)
+        public Builder WithLogger(ILogger<RedisCircuitBreaker> logger)
         {
             _logger = logger;
             return this;
@@ -177,8 +178,7 @@ public static class CircuitBreaker
                 OnCircuitHalfOpen = _onStateChange != null ? c => _onStateChange(new StateChange(c.CircuitBreakerId, "HalfOpen", c.Timestamp)) : null
             };
 
-            var logger = _logger ?? LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning))
-                .CreateLogger<RedisCircuitBreaker>();
+            var logger = _logger ?? NullLogger<RedisCircuitBreaker>.Instance;
 
             var innerCb = new RedisCircuitBreaker(options, logger);
             return new CircuitBreakerWrapper(innerCb);
@@ -271,15 +271,15 @@ internal class CircuitBreakerWrapper : ICircuitBreaker
             _lastKnownState = "Closed";
             return result;
         }
-        catch (BrokenCircuitException ex)
-        {
-            _lastKnownState = "Open";
-            throw new CircuitOpenException(ex.RetryAfter);
-        }
         catch (IsolatedCircuitException)
         {
             _lastKnownState = "Isolated";
             throw new CircuitOpenException();
+        }
+        catch (BrokenCircuitException ex)
+        {
+            _lastKnownState = "Open";
+            throw new CircuitOpenException(ex.RetryAfter);
         }
     }
 

@@ -1,5 +1,5 @@
 // Copyright (c) 2015-2024, App vNext (Polly Project)
-// Modifications Copyright (c) 2026, Polly.Redis Contributors
+// Modifications Copyright (c) 2026, DistributedCircuitBreaker.Redis Contributors
 // Licensed under BSD-3-Clause
 
 namespace Polly.Redis;
@@ -11,10 +11,23 @@ namespace Polly.Redis;
 public class BrokenCircuitException : Exception
 {
     /// <summary>
+    /// Gets the amount of time before the circuit can become closed, if known.
+    /// </summary>
+    public TimeSpan? RetryAfter { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="BrokenCircuitException"/> class.
     /// </summary>
     public BrokenCircuitException()
         : base("The circuit is now open and is not allowing calls.")
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with a message.
+    /// </summary>
+    protected BrokenCircuitException(string message)
+        : base(message)
     {
     }
 
@@ -24,22 +37,18 @@ public class BrokenCircuitException : Exception
     /// <param name="retryAfter">The period after which the circuit will close.</param>
     public BrokenCircuitException(TimeSpan retryAfter)
         : base($"The circuit is now open and is not allowing calls. It can be retried after '{retryAfter}'.")
-        => RetryAfter = retryAfter;
+    {
+        RetryAfter = retryAfter;
+    }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BrokenCircuitException"/> class.
+    /// Initializes a new instance with a message and retry period.
     /// </summary>
-    /// <param name="message">The message that describes the error.</param>
-    /// <param name="retryAfter">The period after which the circuit will close.</param>
-    /// <param name="inner">The inner exception.</param>
     public BrokenCircuitException(string message, TimeSpan retryAfter, Exception? inner = null)
-        : base(message, inner) 
-        => RetryAfter = retryAfter;
-
-    /// <summary>
-    /// Gets the amount of time before the circuit can become closed, if known.
-    /// </summary>
-    public TimeSpan? RetryAfter { get; }
+        : base(message, inner)
+    {
+        RetryAfter = retryAfter;
+    }
 }
 
 /// <summary>
@@ -55,3 +64,4 @@ public class IsolatedCircuitException : BrokenCircuitException
     {
     }
 }
+

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Polly.Redis;
 
@@ -31,8 +32,7 @@ public static class RedisCircuitBreakerExtensions
         this RedisCircuitBreakerOptions options,
         ILogger<RedisCircuitBreaker>? logger = null)
     {
-        logger ??= LoggerFactory.Create(builder => builder.AddConsole())
-            .CreateLogger<RedisCircuitBreaker>();
+        logger ??= NullLogger<RedisCircuitBreaker>.Instance;
 
         return new RedisCircuitBreaker(options, logger);
     }
