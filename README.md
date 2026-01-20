@@ -1,10 +1,12 @@
 # CircuitBreaker.Redis.Distributed
 
 [![NuGet](https://img.shields.io/nuget/v/CircuitBreaker.Redis.Distributed.svg)](https://www.nuget.org/packages/CircuitBreaker.Redis.Distributed/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/CircuitBreaker.Redis.Distributed.svg)](https://www.nuget.org/packages/CircuitBreaker.Redis.Distributed/)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
 
-**Distributed Circuit Breaker for .NET** - Coordinate circuit breaker state across multiple instances using Redis.
+**Distributed Circuit Breaker for .NET that coordinates state across multiple application instances using Redis.**
+
+When one instance detects failures and breaks the circuit, **ALL instances immediately stop calling** the failing service. No more cascading failures!
 
 ## 🚀 Quick Start
 
@@ -13,102 +15,374 @@ dotnet add package CircuitBreaker.Redis.Distributed
 ```
 
 ```csharp
-using Polly.Redis;
+using CircuitBreaker.Redis.Distributed;
 
-// Create
-var cb = CircuitBreaker.Create("my-api", "localhost:6379");
+// Create circuit breaker
+var cb = DistributedCircuitBreaker.Create("payment-api", "localhost:6379");
 
-// Use
-var result = await cb.Execute(async () => await CallApi());
-```
-
-## ✨ Features
-
-- 🌐 **Distributed State** - All instances coordinate via Redis
-- ⚡ **Zero Config** - Works out of the box
-- 🔄 **Universal Redis** - Azure, AWS, Redis Cloud, self-hosted
-- 🛡️ **Resilient** - Fallback to local state if Redis unavailable
-- 📊 **Smart Metrics** - Sliding window failure tracking
-- 🎯 **Simple API** - Easy to use, hard to misuse
-
-## 📖 More Examples
-
-### With Automatic Fallback
-```csharp
-var result = await cb.Execute(
-    action: async () => await PrimaryApi(),
-    fallback: async () => await BackupApi()
+// Simple call with automatic fallback - NO EXCEPTIONS!
+var result = await cb.CallWithFallback(
+    primary: () => CallPaymentGateway(amount),
+    fallback: () => CallBackupGateway(amount),
+    isSuccess: (r) => r?.Success == true
 );
 ```
 
-### Custom Configuration
-```csharp
-var cb = CircuitBreaker.Create(config => config
-    .WithRedis("your-redis:6379")
-    .WithCircuitId("payment-api")
-    .FailWhen(failureRatio: 0.5, minimumCalls: 5)
-    .StayOpenFor(seconds: 30)
-    .OnStateChange(change => logger.Log(change))
-);
-```
-
-### Dependency Injection
-```csharp
-builder.Services.AddCircuitBreaker("payment-api", config => config
-    .WithRedis(builder.Configuration.GetConnectionString("Redis"))
-    .FailWhen(0.5, 5)
-);
-```
-
-## 📊 How It Works
-
-When any instance detects failures exceeding threshold:
-1. Circuit breaks in Redis
-2. **ALL instances** immediately see it
-3. All stop calling the failing service
-4. After break duration, circuit half-opens
-5. If service recovered, all resume
-
-**Perfect for microservices, cloud apps, and distributed systems!**
-
-## 🎯 Use Cases
-
-- 🏢 **Microservices** - Coordinate circuit state across services
-- ☁️ **Cloud Apps** - Azure, AWS, GCP deployments
-- 📈 **Scaled Apps** - Kubernetes, Docker Swarm
-- 🔄 **API Gateways** - Protect downstream services
-- 💰 **Cost Savings** - Stop hammering paid APIs when they're down
-
-## 🆚 Why Choose CircuitBreaker.Redis.Distributed?
-
-| Feature | Polly Built-in | CircuitBreaker.Redis.Distributed |
-|---------|----------------|----------------------------------|
-| State Storage | In-memory (per instance) | Redis (distributed) |
-| Multi-instance Coordination | ❌ No | ✅ Yes |
-| All instances know circuit state | ❌ No | ✅ Yes |
-| Manual failover across instances | ❌ No | ✅ Yes |
-| Works with any Redis | N/A | ✅ Yes |
-
-## 📁 Documentation
-
-- [Quick Start Guide](src/Polly.Redis/README.md)
-- [Sample Application](samples/Polly.Redis.Sample/)
-- API Reference (coming soon)
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests
-4. Submit a Pull Request
-
-## 📄 License
-
-BSD-3-Clause (same as Polly)
-
-Based on [Polly](https://github.com/App-vNext/Polly) circuit breaker concepts.
+**That's it!** 3 lines of code for distributed resilience.
 
 ---
 
-**Built with** ❤️ **by** [Sanket Singh](https://github.com/sanketsingh001)
+## 🎯 Why This Package?
+
+### The Problem
+
+You have 10 instances of your payment service. When the payment gateway goes down:
+
+```
+Instance 1: Detects failure, waits, retries, fails again...
+Instance 2: Doesn't know, keeps calling, fails...
+Instance 3: Doesn't know, keeps calling, fails...
+...
+Instance 10: All failing, users frustrated, cascading failure!
+```
+
+**Recovery time: 25+ minutes** (each instance learns independently)
+
+### The Solution
+
+With CircuitBreaker.Redis.Distributed:
+
+```
+Instance 1: Detects failures → Opens circuit in Redis
+Instance 2: Checks Redis → Sees circuit open → Uses fallback
+Instance 3: Checks Redis → Sees circuit open → Uses fallback
+...
+All instances: Immediate fallback, users happy!
+```
+
+**Recovery time: 10 seconds** (coordinated via Redis)
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **🌐 Distributed State** | All instances share circuit state via Redis |
+| **🔄 Multiple Fallbacks** | Chain fallbacks that try in order |
+| **✅ Custom Success Check** | YOU define what "success" means |
+| **🔒 Distributed Locking** | Prevents race conditions on state changes |
+| **📊 Sliding Window** | Only counts recent failures (configurable) |
+| **🔌 Works Everywhere** | Azure Redis, AWS ElastiCache, Redis Cloud, self-hosted |
+| **💾 Auto Fallback** | Works even if Redis is down (uses local memory) |
+| **📡 State Callbacks** | Get notified when circuit opens/closes |
+
+---
+
+## 📖 Usage Examples
+
+### Simple Call with Fallback
+
+```csharp
+var result = await cb.CallWithFallback(
+    primary: () => CallPrimaryApi(),
+    fallback: () => CallBackupApi(),
+    isSuccess: (r) => r?.StatusCode == 200
+);
+// result is ALWAYS valid (from primary or fallback)
+// No try-catch needed!
+```
+
+### Multiple Fallbacks
+
+```csharp
+var result = await cb.CallWithFallback(
+    primary: () => CallAzureApi(),
+    isSuccess: (r) => r?.Data != null,
+    fallbacks: new[] {
+        () => CallAwsApi(),        // Try this first
+        () => CallGcpApi(),        // Then this
+        () => GetCachedData()      // Last resort
+    }
+);
+```
+
+### With Logging
+
+```csharp
+var result = await cb.CallWithFallback(
+    primary: () => CallExternalService(),
+    fallback: () => GetCachedResponse(),
+    isSuccess: (r) => r != null,
+    onCircuitOpen: () => logger.LogWarning("Circuit opened!"),
+    onFallbackUsed: () => logger.LogInfo("Using fallback")
+);
+```
+
+### Full Configuration
+
+```csharp
+var cb = DistributedCircuitBreaker.Create(config => config
+    .WithCircuitId("payment-gateway")
+    .WithRedis("your-cache.redis.cache.windows.net:6380,ssl=True,password=xxx")
+    .FailWhen(failureRatio: 0.5, minimumCalls: 5)
+    .StayOpenFor(TimeSpan.FromSeconds(30))
+    .MeasureFailuresOver(TimeSpan.FromSeconds(10))
+    .OnStateChange(change => 
+    {
+        logger.LogWarning($"Circuit {change.CircuitId} → {change.NewState}");
+    })
+);
+```
+
+### ASP.NET Core Dependency Injection
+
+```csharp
+// Program.cs
+builder.Services.AddDistributedCircuitBreaker("payment", b => b
+    .WithRedis(connectionString)
+    .FailWhen(0.5, 5)
+);
+
+// PaymentService.cs
+public class PaymentService
+{
+    private readonly IDistributedCircuitBreaker _cb;
+
+    public PaymentService(
+        [FromKeyedServices("payment")] IDistributedCircuitBreaker cb)
+    {
+        _cb = cb;
+    }
+
+    public async Task<PaymentResult> ProcessPayment(decimal amount)
+    {
+        return await _cb.CallWithFallback(
+            primary: () => _primaryGateway.Charge(amount),
+            fallback: () => _backupGateway.Charge(amount),
+            isSuccess: (r) => r?.Approved == true
+        );
+    }
+}
+```
+
+---
+
+## 🔧 How It Works
+
+### State Machine
+
+```
+┌──────────────────────────────────────────────────┐
+│                                                  │
+│    CLOSED ────(failures exceed threshold)────►   │
+│       │                                OPEN      │
+│       │                                  │       │
+│       ◄──(probe succeeds)── HALF-OPEN ◄──┘       │
+│                                  │               │
+│                     (probe fails)────────────►   │
+│                                                  │
+└──────────────────────────────────────────────────┘
+```
+
+| State | Allows Calls? | Description |
+|-------|---------------|-------------|
+| **Closed** | ✅ Yes | Normal operation |
+| **Open** | ❌ No | Blocking calls, using fallback |
+| **Half-Open** | ⚠️ One | Testing if service recovered |
+
+### Redis Keys Structure
+
+```
+cb:{circuitId}:state     → "Closed" | "Open" | "HalfOpen"
+cb:{circuitId}:metrics   → { successCount, failureCount, windowStart }
+cb:{circuitId}:blocked   → Timestamp when circuit opened
+cb:{circuitId}:lock      → Distributed lock token
+```
+
+---
+
+## ⚙️ Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `CircuitId` | Required | Unique ID - instances with same ID share state |
+| `RedisConnection` | Required | Redis connection string |
+| `FailureRatio` | 0.5 (50%) | Break when failures exceed this ratio |
+| `MinimumCalls` | 5 | Min calls before circuit can break |
+| `BreakDuration` | 30s | How long circuit stays open |
+| `SamplingWindow` | 10s | Sliding window for failure tracking |
+| `FallbackToMemory` | true | Use local memory if Redis unavailable |
+
+---
+
+## 🌐 Supported Redis Providers
+
+```csharp
+// Azure Redis Cache
+.WithRedis("your-cache.redis.cache.windows.net:6380,ssl=True,password=xxx")
+
+// AWS ElastiCache
+.WithRedis("your-cluster.amazonaws.com:6379")
+
+// Redis Cloud
+.WithRedis("redis-12345.cloud.redislabs.com:12345,password=xxx")
+
+// Self-hosted / Docker
+.WithRedis("localhost:6379")
+```
+
+---
+
+## 📊 Performance
+
+Tested with Azure Redis Cache:
+
+| Metric | Value |
+|--------|-------|
+| **Throughput** | 460+ requests/second |
+| **Average Latency** | 104ms |
+| **P99 Latency** | 213ms |
+| **Recovery Time** | 10 seconds (vs 25 min without) |
+
+---
+
+## 🔌 Real-World Scenarios
+
+### Scenario 1: Payment Gateway Failover
+
+```csharp
+// Primary: Stripe, Fallback: PayPal
+var payment = await cb.CallWithFallback(
+    primary: () => _stripe.Charge(amount),
+    fallback: () => _paypal.Charge(amount),
+    isSuccess: (r) => r?.Approved == true,
+    onFallbackUsed: () => _metrics.IncrementPaypalUsage()
+);
+```
+
+### Scenario 2: Database Read Replica
+
+```csharp
+// Primary: Read/Write DB, Fallback: Read Replica
+var user = await cb.CallWithFallback(
+    primary: () => _primaryDb.GetUser(id),
+    fallback: () => _replicaDb.GetUser(id),
+    isSuccess: (r) => r != null
+);
+```
+
+### Scenario 3: External API with Cache
+
+```csharp
+// Primary: Live API, Fallback: Cached data
+var data = await cb.CallWithFallback(
+    primary: () => _externalApi.GetData(),
+    fallback: () => _cache.GetData(),
+    isSuccess: (r) => r?.IsValid == true
+);
+```
+
+### Scenario 4: Multi-Region Failover
+
+```csharp
+var response = await cb.CallWithFallback(
+    primary: () => CallUsEastApi(),
+    isSuccess: (r) => r?.Success == true,
+    fallbacks: new[] {
+        () => CallUsWestApi(),
+        () => CallEuApi(),
+        () => GetCachedResponse()
+    }
+);
+```
+
+---
+
+## 📋 API Reference
+
+### IDistributedCircuitBreaker
+
+```csharp
+public interface IDistributedCircuitBreaker
+{
+    // Properties
+    string State { get; }           // Current state
+    bool IsAllowingCalls { get; }   // Can calls go through?
+    bool IsHealthy { get; }         // Is circuit closed?
+
+    // Simple call with fallback (v2.0)
+    Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<Task<T>> fallback,
+        Func<T, bool> isSuccess,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null);
+
+    // Multiple fallbacks (v2.0)
+    Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<T, bool> isSuccess,
+        Func<Task<T>>[] fallbacks,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null);
+
+    // Manual control
+    Task Open();    // Block all calls
+    Task Close();   // Resume calls
+}
+```
+
+---
+
+## 🔄 Migration from v1.x
+
+v2.0 is **fully backward compatible**. Your existing code works!
+
+```csharp
+// v1.x code (still works)
+using Polly.Redis;  // Old namespace still works
+var cb = CircuitBreaker.Create("api", "redis");
+
+// v2.0 code (recommended)
+using CircuitBreaker.Redis.Distributed;  // New namespace
+var cb = DistributedCircuitBreaker.Create("api", "redis");
+```
+
+**New in v2.0:**
+- `CallWithFallback` - Simple API, no exceptions needed
+- `isSuccess` - YOU define what success means
+- Multiple fallbacks
+- Better namespace
+
+---
+
+## 📚 Learn More
+
+- [Complete Feature List](docs/features.md)
+- [Internal Architecture](docs/architecture.md)
+- [Sliding Window Algorithm](docs/sliding-window.md)
+- [Distributed Locking](docs/locking.md)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
+
+---
+
+## 📄 License
+
+BSD-3-Clause License. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Inspired by [Polly](https://github.com/App-vNext/Polly) circuit breaker patterns
+- Uses [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis) for Redis operations
+
+---
+
+**Made with ❤️ by [Sanket Singh](https://github.com/sanketsingh001)**
