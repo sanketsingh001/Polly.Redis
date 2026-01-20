@@ -10,7 +10,7 @@
     
     <!-- NuGet Package Metadata - Optimized for Discoverability -->
     <PackageId>CircuitBreaker.Redis.Distributed</PackageId>
-    <Version>1.0.0</Version>
+    <Version>2.0.0</Version>
     <Authors>Sanket Singh</Authors>
     <Company>Open Source</Company>
     <Product>CircuitBreaker.Redis.Distributed</Product>
@@ -23,28 +23,27 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes>
-      🎉 Initial Release v1.0.0
+      🚀 v2.0.0 - Major API Simplification!
       
-      ✨ Features:
-      • Distributed circuit breaker with Redis state coordination
-      • All instances share circuit state - when one breaks, all stop
-      • Distributed locking prevents race conditions
-      • Simple fluent API: CircuitBreaker.Create("id", "redis")
-      • Automatic fallback to in-memory if Redis unavailable
-      • Works with ALL Redis providers (Azure, AWS, Redis Cloud, self-hosted)
-      • Built-in resilience patterns
+      🆕 New Features:
+      • CallWithFallback - Simple API with NO exceptions needed!
+      • isSuccess parameter - YOU define what success means
+      • Multiple fallbacks - Chain fallbacks that try in order
+      • IsHealthy property - Quick circuit health check
+      • Better namespace - using CircuitBreaker.Redis.Distributed
       
-      🔧 Technical:
-      • Based on Polly 8.5.0 concepts
-      • Redis SETNX for distributed locking
-      • Lua scripts for atomic operations
-      • State machine pattern implementation
+      ✨ All v1.0 Features Preserved:
+      • Distributed state via Redis
+      • Sliding window failure tracking
+      • Distributed locking (Redis SETNX)
+      • State machine (Closed/Open/HalfOpen/Isolated)
+      • Automatic fallback to in-memory
+      • Works with Azure, AWS, Redis Cloud, self-hosted
       
-      📚 Perfect for:
-      • Microservices architectures
-      • Kubernetes/Docker deployments
-      • Cloud-native applications
-      • Scaled systems with multiple instances
+      🔄 Backward Compatible:
+      • Old Execute() API still works
+      • Old CircuitBreaker class still works
+      • Migrate at your own pace
     </PackageReleaseNotes>
   </PropertyGroup>
 

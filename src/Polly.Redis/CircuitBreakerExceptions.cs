@@ -1,8 +1,8 @@
 // Copyright (c) 2015-2024, App vNext (Polly Project)
-// Modifications Copyright (c) 2026, DistributedCircuitBreaker.Redis Contributors
+// Modifications Copyright (c) 2026, CircuitBreaker.Redis.Distributed Contributors
 // Licensed under BSD-3-Clause
 
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
 
 /// <summary>
 /// Exception thrown when a circuit is broken.

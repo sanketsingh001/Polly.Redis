@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text.Json;
 
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
 
 /// <summary>
 /// Redis state store for circuit breaker with distributed locking.

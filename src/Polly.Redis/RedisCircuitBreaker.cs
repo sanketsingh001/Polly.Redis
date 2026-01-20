@@ -1,11 +1,11 @@
 // Copyright (c) 2015-2024, App vNext (Polly Project)
-// Modifications Copyright (c) 2026, Polly.Redis Contributors
+// Modifications Copyright (c) 2026, CircuitBreaker.Redis.Distributed Contributors
 // Licensed under BSD-3-Clause
 // Based on Polly 8.5.0 CircuitStateController
 
 using Microsoft.Extensions.Logging;
 
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
 
 /// <summary>
 /// Redis-backed circuit breaker implementation with distributed locking.
@@ -261,7 +261,7 @@ public class RedisCircuitBreaker : IAsyncDisposable
             _logger.LogError(triggeringException, "🔴 Circuit {CircuitId} OPENED. Blocked until {BlockedUntil}",
                 _options.CircuitBreakerId, blockedUntil);
 
-            _options.OnCircuitOpened?.Invoke(new CircuitStateChange(
+            _options.OnCircuitOpened?.Invoke(new InternalCircuitStateChange(
                 _options.CircuitBreakerId,
                 CircuitState.Closed,
                 CircuitState.Open,
@@ -304,7 +304,7 @@ public class RedisCircuitBreaker : IAsyncDisposable
 
             _logger.LogInformation("🟡 Circuit {CircuitId} transitioned to HALF-OPEN", _options.CircuitBreakerId);
 
-            _options.OnCircuitHalfOpen?.Invoke(new CircuitStateChange(
+            _options.OnCircuitHalfOpen?.Invoke(new InternalCircuitStateChange(
                 _options.CircuitBreakerId,
                 CircuitState.Open,
                 CircuitState.HalfOpen,
@@ -343,7 +343,7 @@ public class RedisCircuitBreaker : IAsyncDisposable
 
             _logger.LogInformation("🟢 Circuit {CircuitId} transitioned to CLOSED", _options.CircuitBreakerId);
 
-            _options.OnCircuitClosed?.Invoke(new CircuitStateChange(
+            _options.OnCircuitClosed?.Invoke(new InternalCircuitStateChange(
                 _options.CircuitBreakerId,
                 CircuitState.HalfOpen,
                 CircuitState.Closed,

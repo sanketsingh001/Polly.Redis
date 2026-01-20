@@ -1,7 +1,7 @@
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
 
 /// <summary>
-/// Health metrics for circuit breaker.
+/// Health metrics for circuit breaker with sliding window.
 /// </summary>
 public record HealthMetrics
 {

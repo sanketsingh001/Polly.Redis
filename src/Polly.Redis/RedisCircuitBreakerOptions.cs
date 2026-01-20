@@ -1,4 +1,4 @@
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
 
 /// <summary>
 /// Configuration options for Redis-backed circuit breaker.
@@ -22,7 +22,7 @@ public class RedisCircuitBreakerOptions
     /// <summary>
     /// Key prefix for Redis keys.
     /// </summary>
-    public string KeyPrefix { get; set; } = "polly:redis:cb";
+    public string KeyPrefix { get; set; } = "cb:distributed";
 
     /// <summary>
     /// Failure threshold ratio (0.0 to 1.0). Circuit breaks when failures exceed this ratio.
@@ -31,7 +31,7 @@ public class RedisCircuitBreakerOptions
     public double FailureRatio { get; set; } = 0.5;
 
     /// <summary>
-    /// Time window for sampling failures.
+    /// Time window for sampling failures (sliding window).
     /// Default: 10 seconds
     /// </summary>
     public TimeSpan SamplingDuration { get; set; } = TimeSpan.FromSeconds(10);
@@ -63,23 +63,23 @@ public class RedisCircuitBreakerOptions
     /// <summary>
     /// Called when circuit opens.
     /// </summary>
-    public Action<CircuitStateChange>? OnCircuitOpened { get; set; }
+    public Action<InternalCircuitStateChange>? OnCircuitOpened { get; set; }
 
     /// <summary>
     /// Called when circuit closes.
     /// </summary>
-    public Action<CircuitStateChange>? OnCircuitClosed { get; set; }
+    public Action<InternalCircuitStateChange>? OnCircuitClosed { get; set; }
 
     /// <summary>
     /// Called when circuit transitions to half-open.
     /// </summary>
-    public Action<CircuitStateChange>? OnCircuitHalfOpen { get; set; }
+    public Action<InternalCircuitStateChange>? OnCircuitHalfOpen { get; set; }
 }
 
 /// <summary>
-/// Information about a circuit state change.
+/// Internal state change record (different from public CircuitStateChange).
 /// </summary>
-public record CircuitStateChange(
+public record InternalCircuitStateChange(
     string CircuitBreakerId,
     CircuitState PriorState,
     CircuitState NewState,

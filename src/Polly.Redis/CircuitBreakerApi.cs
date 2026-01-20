@@ -1,55 +1,57 @@
-// DistributedCircuitBreaker.Redis - Developer-Friendly Distributed Circuit Breaker
-// Simple to use, highly configurable, works with any scenario
+// CircuitBreaker.Redis.Distributed - v2.0
+// Simple, powerful distributed circuit breaker with Redis coordination
+// All instances share state - when one breaks, ALL stop calling!
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 
-namespace Polly.Redis;
+namespace CircuitBreaker.Redis.Distributed;
+
+#region Simple API - Start Here!
 
 /// <summary>
-/// SIMPLE USAGE:
+/// 🚀 QUICK START:
 /// 
-/// var cb = CircuitBreaker.Create("my-circuit", "localhost:6379");
-/// var result = await cb.Execute(async () => await CallApi());
+/// var cb = DistributedCircuitBreaker.Create("my-api", "redis:6379");
 /// 
-/// WITH FALLBACK:
+/// // Simple call
+/// var result = await cb.Execute(() => CallApi());
 /// 
-/// var result = await cb.Execute(
-///     action: async () => await PrimaryApi(),
-///     fallback: async () => await BackupApi()
+/// // With automatic fallback - NO EXCEPTIONS NEEDED!
+/// var result = await cb.CallWithFallback(
+///     primary: () => CallPrimaryApi(),
+///     fallback: () => CallBackupApi(),
+///     isSuccess: (r) => r?.StatusCode == 200
 /// );
 /// 
-/// ADVANCED CONFIG:
-/// 
-/// var cb = CircuitBreaker.Create(config => config
-///     .WithRedis("your-redis:6379")
-///     .WithCircuitId("payment-api")
-///     .FailWhen(failureRatio: 0.5, minimumCalls: 5)
-///     .StayOpenFor(seconds: 30)
-///     .OnStateChange(change => logger.Log(change))
+/// // Multiple fallbacks (try each in order)
+/// var result = await cb.CallWithFallback(
+///     primary: () => AzureApi(),
+///     isSuccess: (r) => r != null,
+///     fallbacks: new[] { () => AwsApi(), () => CachedData() }
 /// );
 /// </summary>
-public static class CircuitBreaker
+public static class DistributedCircuitBreaker
 {
     /// <summary>
-    /// Simplest way to create a circuit breaker.
+    /// Create circuit breaker with minimal config.
     /// </summary>
-    /// <param name="circuitId">Unique ID - instances with same ID share state</param>
-    /// <param name="redis">Redis connection string (any provider works)</param>
-    public static ICircuitBreaker Create(string circuitId, string redis)
+    /// <param name="circuitId">Unique ID - instances with same ID share state via Redis</param>
+    /// <param name="redisConnection">Redis connection (Azure, AWS, self-hosted)</param>
+    public static IDistributedCircuitBreaker Create(string circuitId, string redisConnection)
     {
         return new Builder()
             .WithCircuitId(circuitId)
-            .WithRedis(redis)
+            .WithRedis(redisConnection)
             .Build();
     }
 
     /// <summary>
-    /// Create with configuration builder for full control.
+    /// Create with full configuration.
     /// </summary>
-    public static ICircuitBreaker Create(Action<Builder> configure)
+    public static IDistributedCircuitBreaker Create(Action<Builder> configure)
     {
         var builder = new Builder();
         configure(builder);
@@ -68,35 +70,19 @@ public static class CircuitBreaker
         private TimeSpan _breakDuration = TimeSpan.FromSeconds(30);
         private TimeSpan _samplingWindow = TimeSpan.FromSeconds(10);
         private bool _fallbackToMemory = true;
-        private Action<StateChange>? _onStateChange;
+        private Action<CircuitStateChange>? _onStateChange;
+        private Action? _onCircuitOpen;
+        private Action? _onCircuitClose;
         private ILogger<RedisCircuitBreaker>? _logger;
 
-        /// <summary>
-        /// Set the circuit breaker ID. Instances with same ID share state.
-        /// </summary>
-        public Builder WithCircuitId(string id)
-        {
-            _circuitId = id;
-            return this;
-        }
+        /// <summary>Set circuit ID. Instances with same ID share state.</summary>
+        public Builder WithCircuitId(string id) { _circuitId = id; return this; }
 
-        /// <summary>
-        /// Set Redis connection. Works with Azure, AWS, Redis Cloud, or self-hosted.
-        /// Examples:
-        /// - "localhost:6379"
-        /// - "your-cache.redis.cache.windows.net:6380,ssl=True,password=xxx"
-        /// - "your-cluster.cache.amazonaws.com:6379"
-        /// </summary>
-        public Builder WithRedis(string connectionString)
-        {
-            _redis = connectionString;
-            return this;
-        }
+        /// <summary>Set Redis connection. Works with Azure, AWS, Redis Cloud, self-hosted.</summary>
+        public Builder WithRedis(string connectionString) { _redis = connectionString; return this; }
 
-        /// <summary>
-        /// Configure when circuit should break.
-        /// </summary>
-        /// <param name="failureRatio">Break when failures exceed this ratio (0.0-1.0). Default: 0.5 (50%)</param>
+        /// <summary>Configure failure threshold.</summary>
+        /// <param name="failureRatio">Break when failures exceed this ratio (0.0-1.0). Default: 0.5</param>
         /// <param name="minimumCalls">Minimum calls before circuit can break. Default: 5</param>
         public Builder FailWhen(double failureRatio = 0.5, int minimumCalls = 5)
         {
@@ -105,64 +91,31 @@ public static class CircuitBreaker
             return this;
         }
 
-        /// <summary>
-        /// How long circuit stays open before trying again.
-        /// </summary>
-        public Builder StayOpenFor(TimeSpan duration)
-        {
-            _breakDuration = duration;
-            return this;
-        }
+        /// <summary>How long circuit stays open before retrying. Default: 30s</summary>
+        public Builder StayOpenFor(TimeSpan duration) { _breakDuration = duration; return this; }
+        
+        /// <summary>How long circuit stays open (seconds).</summary>
+        public Builder StayOpenFor(int seconds) { _breakDuration = TimeSpan.FromSeconds(seconds); return this; }
 
-        /// <summary>
-        /// How long circuit stays open (in seconds).
-        /// </summary>
-        public Builder StayOpenFor(int seconds)
-        {
-            _breakDuration = TimeSpan.FromSeconds(seconds);
-            return this;
-        }
+        /// <summary>Sliding window for failure measurement. Default: 10s</summary>
+        public Builder MeasureFailuresOver(TimeSpan window) { _samplingWindow = window; return this; }
 
-        /// <summary>
-        /// Time window for measuring failure ratio. Default: 10 seconds.
-        /// </summary>
-        public Builder MeasureFailuresOver(TimeSpan window)
-        {
-            _samplingWindow = window;
-            return this;
-        }
+        /// <summary>Called when circuit state changes.</summary>
+        public Builder OnStateChange(Action<CircuitStateChange> handler) { _onStateChange = handler; return this; }
 
-        /// <summary>
-        /// Called when circuit state changes (opened, closed, half-open).
-        /// </summary>
-        public Builder OnStateChange(Action<StateChange> handler)
-        {
-            _onStateChange = handler;
-            return this;
-        }
+        /// <summary>Called when circuit opens (starts blocking calls).</summary>
+        public Builder OnCircuitOpen(Action handler) { _onCircuitOpen = handler; return this; }
 
-        /// <summary>
-        /// If Redis unavailable, fallback to local in-memory (per instance). Default: true.
-        /// </summary>
-        public Builder FallbackToMemory(bool enable = true)
-        {
-            _fallbackToMemory = enable;
-            return this;
-        }
+        /// <summary>Called when circuit closes (resumes calls).</summary>
+        public Builder OnCircuitClose(Action handler) { _onCircuitClose = handler; return this; }
 
-        /// <summary>
-        /// Provide a logger for debugging.
-        /// </summary>
-        public Builder WithLogger(ILogger<RedisCircuitBreaker> logger)
-        {
-            _logger = logger;
-            return this;
-        }
+        /// <summary>If Redis unavailable, fallback to local memory. Default: true</summary>
+        public Builder FallbackToMemory(bool enable = true) { _fallbackToMemory = enable; return this; }
 
-        /// <summary>
-        /// Build the circuit breaker.
-        /// </summary>
-        public ICircuitBreaker Build()
+        /// <summary>Provide logger for debugging.</summary>
+        public Builder WithLogger(ILogger<RedisCircuitBreaker> logger) { _logger = logger; return this; }
+
+        public IDistributedCircuitBreaker Build()
         {
             var options = new RedisCircuitBreakerOptions
             {
@@ -173,95 +126,132 @@ public static class CircuitBreaker
                 BreakDuration = _breakDuration,
                 SamplingDuration = _samplingWindow,
                 EnableFallbackToInMemory = _fallbackToMemory,
-                OnCircuitOpened = _onStateChange != null ? c => _onStateChange(new StateChange(c.CircuitBreakerId, "Opened", c.Timestamp)) : null,
-                OnCircuitClosed = _onStateChange != null ? c => _onStateChange(new StateChange(c.CircuitBreakerId, "Closed", c.Timestamp)) : null,
-                OnCircuitHalfOpen = _onStateChange != null ? c => _onStateChange(new StateChange(c.CircuitBreakerId, "HalfOpen", c.Timestamp)) : null
+                OnCircuitOpened = _onStateChange != null || _onCircuitOpen != null
+                    ? c => { _onStateChange?.Invoke(new CircuitStateChange(c.CircuitBreakerId, "Open", c.Timestamp)); _onCircuitOpen?.Invoke(); }
+                    : null,
+                OnCircuitClosed = _onStateChange != null || _onCircuitClose != null
+                    ? c => { _onStateChange?.Invoke(new CircuitStateChange(c.CircuitBreakerId, "Closed", c.Timestamp)); _onCircuitClose?.Invoke(); }
+                    : null,
+                OnCircuitHalfOpen = _onStateChange != null
+                    ? c => _onStateChange(new CircuitStateChange(c.CircuitBreakerId, "HalfOpen", c.Timestamp))
+                    : null
             };
 
             var logger = _logger ?? NullLogger<RedisCircuitBreaker>.Instance;
-
             var innerCb = new RedisCircuitBreaker(options, logger);
-            return new CircuitBreakerWrapper(innerCb);
+            return new DistributedCircuitBreakerWrapper(innerCb);
         }
     }
 }
 
+#endregion
+
+#region Interface
+
 /// <summary>
-/// Simple interface for circuit breaker - easy to understand.
+/// Distributed circuit breaker interface.
 /// </summary>
-public interface ICircuitBreaker : IAsyncDisposable
+public interface IDistributedCircuitBreaker : IAsyncDisposable
 {
-    /// <summary>
-    /// Current circuit state: Open, Closed, HalfOpen, or Isolated.
-    /// </summary>
+    /// <summary>Current state: Closed, Open, HalfOpen, Isolated</summary>
     string State { get; }
 
-    /// <summary>
-    /// Is the circuit currently allowing calls?
-    /// </summary>
+    /// <summary>Is circuit allowing calls?</summary>
     bool IsAllowingCalls { get; }
 
+    /// <summary>Is circuit healthy (closed)?</summary>
+    bool IsHealthy { get; }
+
     /// <summary>
-    /// Execute an action through the circuit breaker.
+    /// Execute action through circuit breaker.
     /// Throws CircuitOpenException if circuit is open.
     /// </summary>
     Task<T> Execute<T>(Func<Task<T>> action, CancellationToken ct = default);
 
     /// <summary>
-    /// Execute with automatic fallback if circuit is open.
+    /// 🆕 v2.0: Simple call with automatic fallback - NO EXCEPTIONS!
+    /// 
+    /// Example:
+    /// var result = await cb.CallWithFallback(
+    ///     primary: () => CallPrimaryApi(),
+    ///     fallback: () => CallBackupApi(),
+    ///     isSuccess: (r) => r?.StatusCode == 200
+    /// );
     /// </summary>
+    /// <param name="primary">Primary call to make</param>
+    /// <param name="fallback">Fallback if primary fails or circuit is open</param>
+    /// <param name="isSuccess">YOUR definition of success - return true if response is good</param>
+    /// <param name="onCircuitOpen">Optional: called when circuit opens</param>
+    /// <param name="onFallbackUsed">Optional: called when fallback is used</param>
+    Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<Task<T>> fallback,
+        Func<T, bool> isSuccess,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null);
+
+    /// <summary>
+    /// 🆕 v2.0: Call with multiple fallbacks (tried in order).
+    /// 
+    /// Example:
+    /// var result = await cb.CallWithFallback(
+    ///     primary: () => AzureApi(),
+    ///     isSuccess: (r) => r != null,
+    ///     fallbacks: new[] { () => AwsApi(), () => GcpApi(), () => CachedData() }
+    /// );
+    /// </summary>
+    Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<T, bool> isSuccess,
+        Func<Task<T>>[] fallbacks,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null);
+
+    /// <summary>Execute with automatic fallback (old API, kept for compatibility).</summary>
     Task<T> Execute<T>(Func<Task<T>> action, Func<Task<T>> fallback, CancellationToken ct = default);
 
-    /// <summary>
-    /// Execute void action through circuit breaker.
-    /// </summary>
+    /// <summary>Execute void action.</summary>
     Task Execute(Func<Task> action, CancellationToken ct = default);
 
-    /// <summary>
-    /// Manually open the circuit. All instances will stop calling.
-    /// </summary>
+    /// <summary>Manually open circuit (blocks all calls across all instances).</summary>
     Task Open();
 
-    /// <summary>
-    /// Manually close the circuit. All instances will resume calling.
-    /// </summary>
+    /// <summary>Manually close circuit (resumes calls across all instances).</summary>
     Task Close();
 }
 
-/// <summary>
-/// State change notification.
-/// </summary>
-public record StateChange(string CircuitId, string NewState, DateTimeOffset Timestamp);
+#endregion
 
-/// <summary>
-/// Exception thrown when circuit is open and action is blocked.
-/// </summary>
+#region DTOs
+
+/// <summary>Circuit state change notification.</summary>
+public record CircuitStateChange(string CircuitId, string NewState, DateTimeOffset Timestamp);
+
+/// <summary>Exception when circuit is open.</summary>
 public class CircuitOpenException : Exception
 {
     public TimeSpan? RetryAfter { get; }
-    
-    public CircuitOpenException(TimeSpan? retryAfter = null) 
-        : base("Circuit is open - calls are being blocked")
-    {
-        RetryAfter = retryAfter;
-    }
+    public CircuitOpenException(TimeSpan? retryAfter = null)
+        : base("Circuit is open - calls are being blocked") => RetryAfter = retryAfter;
 }
 
+#endregion
+
+#region Implementation
+
 /// <summary>
-/// Wrapper that provides simple interface.
+/// Wrapper providing simple interface over RedisCircuitBreaker.
 /// </summary>
-internal class CircuitBreakerWrapper : ICircuitBreaker
+internal class DistributedCircuitBreakerWrapper : IDistributedCircuitBreaker
 {
     private readonly RedisCircuitBreaker _inner;
     private string _lastKnownState = "Closed";
 
-    public CircuitBreakerWrapper(RedisCircuitBreaker inner)
-    {
-        _inner = inner;
-    }
+    public DistributedCircuitBreakerWrapper(RedisCircuitBreaker inner) => _inner = inner;
 
     public string State => _lastKnownState;
     public bool IsAllowingCalls => _lastKnownState != "Open" && _lastKnownState != "Isolated";
+    public bool IsHealthy => _lastKnownState == "Closed";
 
     public async Task<T> Execute<T>(Func<Task<T>> action, CancellationToken ct = default)
     {
@@ -283,16 +273,131 @@ internal class CircuitBreakerWrapper : ICircuitBreaker
         }
     }
 
-    public async Task<T> Execute<T>(Func<Task<T>> action, Func<Task<T>> fallback, CancellationToken ct = default)
+    /// <summary>
+    /// 🆕 v2.0: Simple API with NO EXCEPTIONS!
+    /// </summary>
+    public async Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<Task<T>> fallback,
+        Func<T, bool> isSuccess,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null)
     {
-        try
+        // If circuit is open, go straight to fallback
+        if (_lastKnownState == "Open" || _lastKnownState == "Isolated")
         {
-            return await Execute(action, ct);
-        }
-        catch (CircuitOpenException)
-        {
+            onCircuitOpen?.Invoke();
+            onFallbackUsed?.Invoke();
             return await fallback();
         }
+
+        try
+        {
+            // Execute through circuit breaker
+            var result = await _inner.ExecuteAsync(async _ => await primary(), default);
+            
+            // Check if successful using USER'S criteria
+            if (isSuccess(result))
+            {
+                _lastKnownState = "Closed";
+                return result;
+            }
+            else
+            {
+                // Response received but not successful - use fallback
+                onFallbackUsed?.Invoke();
+                return await fallback();
+            }
+        }
+        catch (IsolatedCircuitException)
+        {
+            _lastKnownState = "Isolated";
+            onCircuitOpen?.Invoke();
+            onFallbackUsed?.Invoke();
+            return await fallback();
+        }
+        catch (BrokenCircuitException)
+        {
+            _lastKnownState = "Open";
+            onCircuitOpen?.Invoke();
+            onFallbackUsed?.Invoke();
+            return await fallback();
+        }
+        catch (Exception)
+        {
+            // Any exception = failure, use fallback
+            onFallbackUsed?.Invoke();
+            return await fallback();
+        }
+    }
+
+    /// <summary>
+    /// 🆕 v2.0: Multiple fallbacks - tries each in order until one succeeds.
+    /// </summary>
+    public async Task<T> CallWithFallback<T>(
+        Func<Task<T>> primary,
+        Func<T, bool> isSuccess,
+        Func<Task<T>>[] fallbacks,
+        Action? onCircuitOpen = null,
+        Action? onFallbackUsed = null)
+    {
+        // First try primary
+        if (_lastKnownState != "Open" && _lastKnownState != "Isolated")
+        {
+            try
+            {
+                var result = await _inner.ExecuteAsync(async _ => await primary(), default);
+                if (isSuccess(result))
+                {
+                    _lastKnownState = "Closed";
+                    return result;
+                }
+            }
+            catch (IsolatedCircuitException)
+            {
+                _lastKnownState = "Isolated";
+                onCircuitOpen?.Invoke();
+            }
+            catch (BrokenCircuitException)
+            {
+                _lastKnownState = "Open";
+                onCircuitOpen?.Invoke();
+            }
+            catch { /* Fall through to fallbacks */ }
+        }
+        else
+        {
+            onCircuitOpen?.Invoke();
+        }
+
+        // Try each fallback in order
+        onFallbackUsed?.Invoke();
+        
+        foreach (var fallback in fallbacks)
+        {
+            try
+            {
+                var result = await fallback();
+                if (isSuccess(result))
+                {
+                    return result;
+                }
+            }
+            catch
+            {
+                // Try next fallback
+            }
+        }
+
+        // All fallbacks failed - return last attempt or throw
+        return await fallbacks[^1]();
+    }
+
+    // Old API - kept for backward compatibility
+    public async Task<T> Execute<T>(Func<Task<T>> action, Func<Task<T>> fallback, CancellationToken ct = default)
+    {
+        try { return await Execute(action, ct); }
+        catch (CircuitOpenException) { return await fallback(); }
     }
 
     public async Task Execute(Func<Task> action, CancellationToken ct = default)
@@ -315,30 +420,40 @@ internal class CircuitBreakerWrapper : ICircuitBreaker
     public ValueTask DisposeAsync() => _inner.DisposeAsync();
 }
 
+#endregion
+
+#region DI Extensions
+
 /// <summary>
-/// Dependency Injection extensions.
+/// Dependency Injection extensions for ASP.NET Core.
 /// </summary>
-public static class CircuitBreakerServiceExtensions
+public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add a named circuit breaker to DI.
+    /// Add named circuit breaker to DI.
+    /// 
+    /// Usage:
+    /// services.AddDistributedCircuitBreaker("payment", b => b.WithRedis("redis:6379"));
+    /// 
+    /// Inject:
+    /// public MyService([FromKeyedServices("payment")] IDistributedCircuitBreaker cb)
     /// </summary>
-    public static IServiceCollection AddCircuitBreaker(
+    public static IServiceCollection AddDistributedCircuitBreaker(
         this IServiceCollection services,
         string name,
-        Action<CircuitBreaker.Builder> configure)
+        Action<DistributedCircuitBreaker.Builder> configure)
     {
-        services.AddKeyedSingleton<ICircuitBreaker>(name, (sp, key) =>
+        services.AddKeyedSingleton<IDistributedCircuitBreaker>(name, (sp, key) =>
         {
-            var builder = new CircuitBreaker.Builder();
+            var builder = new DistributedCircuitBreaker.Builder();
             builder.WithCircuitId(name);
-            
+
             var loggerFactory = sp.GetService<ILoggerFactory>();
             if (loggerFactory != null)
             {
                 builder.WithLogger(loggerFactory.CreateLogger<RedisCircuitBreaker>());
             }
-            
+
             configure(builder);
             return builder.Build();
         });
@@ -347,17 +462,52 @@ public static class CircuitBreakerServiceExtensions
     }
 
     /// <summary>
-    /// Add multiple circuit breakers from configuration.
+    /// Add multiple circuit breakers with same Redis connection.
     /// </summary>
-    public static IServiceCollection AddCircuitBreakers(
+    public static IServiceCollection AddDistributedCircuitBreakers(
         this IServiceCollection services,
         string redisConnection,
         params string[] circuitIds)
     {
         foreach (var id in circuitIds)
         {
-            services.AddCircuitBreaker(id, b => b.WithRedis(redisConnection));
+            services.AddDistributedCircuitBreaker(id, b => b.WithRedis(redisConnection));
         }
         return services;
     }
 }
+
+#endregion
+
+#region Backward Compatibility (Old names still work)
+
+// Old interface name - kept for backward compatibility
+public interface ICircuitBreaker : IDistributedCircuitBreaker { }
+
+// Old static class name - kept for backward compatibility
+public static class CircuitBreaker
+{
+    public static IDistributedCircuitBreaker Create(string circuitId, string redis)
+        => DistributedCircuitBreaker.Create(circuitId, redis);
+
+    public static IDistributedCircuitBreaker Create(Action<DistributedCircuitBreaker.Builder> configure)
+        => DistributedCircuitBreaker.Create(configure);
+}
+
+// Old DI extension names
+public static class CircuitBreakerServiceExtensions
+{
+    public static IServiceCollection AddCircuitBreaker(
+        this IServiceCollection services,
+        string name,
+        Action<DistributedCircuitBreaker.Builder> configure)
+        => services.AddDistributedCircuitBreaker(name, configure);
+
+    public static IServiceCollection AddCircuitBreakers(
+        this IServiceCollection services,
+        string redisConnection,
+        params string[] circuitIds)
+        => services.AddDistributedCircuitBreakers(redisConnection, circuitIds);
+}
+
+#endregion
